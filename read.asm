@@ -15,59 +15,83 @@
 ;;
 ;; Author: Florian Marrero Liestmann <f.m.liestmann@fx-ttr.de>
 ;; File: read.asm
-;;
-;; Routines to output strings to TTY
-;;
-;; How to use:
-;;
-;; call scanner
-;; result will be in di
-;;
+
 [BITS 16]
 
-scanner:
-	mov di, __linebuf	; We will read 32 byte
-	xor cx, cx
-.read_char:
+_advance:			; __la <- next key, echoed; CR also echoes LF
 	mov ah, 0x00
 	int 0x16         	; wait for key -> AL
-	
-	cmp al, 0x0D     	; CR?
-	je .end_line
-	
-	cmp al, 0x08		; backspace handling
-	je .do_backspace
-				
-	mov ah, 0x0E		; echo
-	int 0x10
-	
-	stosb
-	inc cx
-	cmp cx, 31
-	jl .read_char
-	jmp .end_line
-	
-.do_backspace:
-	cmp cx, 0
-	je .read_char
-	dec di
-	dec cx
-			
-	mov al, 8		; erase echo: backspace, space, backspace
-	mov ah, 0x0E
-	int 0x10
-	
-	mov al, ' '
-	int 0x10
-	
-	mov al, 8
-	int 0x10
-	
-	jmp .read_char
-
-.end_line:
-	mov byte [di], 0	; zero terminate
-	mov di, __linebuf 	; copy result to di
+	call _print_char
+	cmp al, 0x0D
+	jne .store
+	mov al, 0x0A
+	call _print_char
+.store:
+	mov [__la], al
 	ret
 
-__linebuf:	times 32 db 0
+_skip_ws:			; -> AL = first lookahead above ' '
+	mov al, [__la]
+	cmp al, ' '
+	ja .ret
+	call _advance
+	jmp _skip_ws
+.ret:
+	ret
+
+parse_expr:
+	call _skip_ws
+	cmp al, '('
+	je .list
+
+.atom:
+	mov di, [__names_ptr]
+.copy:
+	stosb
+	call _advance
+	mov al, [__la]
+	cmp al, ')'
+	ja .copy
+	xor al, al
+	stosb
+	mov bx, __names
+.scan:
+	mov si, bx
+	mov di, [__names_ptr]
+.cmp:
+	lodsb
+	scasb
+	jne .next
+	or al, al
+	jnz .cmp
+	mov ax, bx		; match; commit if it is the new copy
+	cmp bx, [__names_ptr]
+	jne .ret
+	mov [__names_ptr], di
+.ret:
+	ret
+.next:
+	lodsb			; skip SI to the start of the next name
+	or al, al
+	jnz .next
+	mov bx, si
+	jmp .scan
+
+.list:
+	call _advance		; consume the (
+.tail:
+	call _skip_ws
+	cmp al, ')'
+	jne .item
+	call _advance		; consume the )
+	xor ax, ax
+	ret
+.item:
+	call parse_expr
+	push ax
+	call .tail		; parse the rest of the list
+	mov dx, ax
+	pop ax
+	jmp cons
+
+__la:	db ' '

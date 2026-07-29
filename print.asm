@@ -15,35 +15,50 @@
 ;;
 ;; Author: Florian Marrero Liestmann <f.m.liestmann@fx-ttr.de>
 ;; File: print.asm
-;;
-;; Routines to output strings to TTY
-;;
-;; How to use:
-;;
-;; mov si, MSG
-;; call printer
-;;
+
 [BITS 16]
-	
+
 printer:
-	push bx
-
-	mov ah, 0x0E 		; BIOS Printing Mode
-	mov bx, 0x00
-
-.loop:
 	lodsb			; For reference see https://www.i8086.de/asm/8086-88-asm-lodsb.html
-	cmp al, 0		; If the null terminator is reached, we're finished.
-	je .end
-
+	or al, al		; If the null terminator is reached, we're finished.
+	jz .end
 	call _print_char
-	jmp .loop
-	
+	jmp printer
 .end:
-	pop bx
 	ret
 
-_print_char:
-	mov ah, 0x0E
+_print_char:			; AL is preserved by the BIOS, BX is clobbered
+	mov ah, 0x0E		; BIOS teletype output, page 0
+	xor bx, bx
 	int 0x10
 	ret
+
+print_val:
+	cmp ax, HEAP
+	jae .list
+	or ax, ax
+	jnz .sym
+	mov ax, __nil_sym
+.sym:
+	xchg ax, si		; a symbol is its name
+	jmp printer
+.list:
+	xchg ax, di
+	mov al, '('
+	call _print_char
+.elem:
+	push di
+	mov ax, [di]
+	call print_val
+	pop di
+	mov di, [di+2]
+	cmp di, HEAP		; any atom cdr ends the list
+	jb .close
+	mov al, ' '
+	call _print_char
+	jmp .elem
+.close:
+	mov al, ')'
+	jmp _print_char
+
+__nil_sym:	db "()", 0x00

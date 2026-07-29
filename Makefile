@@ -1,4 +1,3 @@
-BINDIR = @bindir@
 KERN_SRC=kern.asm
 KERN_OBJ=kern.bin
 OUTPUTS=${KERN_OBJ}
@@ -12,10 +11,10 @@ start: compile-kernel
 compile-kernel: ${KERN_OBJ}
 	@echo "[0] Compiling $<"
 
-${KERN_OBJ}: ${KERN_SRC}
+${KERN_OBJ}: ${KERN_SRC} interp.asm read.asm print.asm
 	@nasm -f bin $< -o $@
 
-.PHONY: clean
+.PHONY: all start compile-kernel clean
 
 clean:
 	@echo "Cleaning"

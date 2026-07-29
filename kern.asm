@@ -15,29 +15,20 @@
 ;;
 ;; Author: Florian Marrero Liestmann <f.m.liestmann@fx-ttr.de>
 ;; File: kern.asm
+;;
+;; The whole interpreter lives in the 510 bytes of the boot sector.
 
 [BITS 16]
 [ORG 0x7C00]
 
-jmp short start
-
-start:
-	jmp 0:boot_init
-
-boot_init: 
-	cli			; Disable interrupts
-	mov ax, 0x00
+boot_init:
+	xor ax, ax
 	mov ds, ax		; Set data segment
 	mov es, ax		; Set extra segment
 	mov ss, ax		; Set stack segment
 	mov sp, 0x7C00		; Set stack pointer
-	sti			; Enable interrupts
 	cld
-
-	call start_interp
-	
-.error:
-	jmp $
+	;; falls through into start_interp
 
 %include "interp.asm"
 
