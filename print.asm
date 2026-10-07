@@ -16,49 +16,50 @@
 ;; Author: Florian Marrero Liestmann <f.m.liestmann@fx-ttr.de>
 ;; File: print.asm
 
-[BITS 16]
-
-printer:
-	lodsb			; For reference see https://www.i8086.de/asm/8086-88-asm-lodsb.html
-	or al, al		; If the null terminator is reached, we're finished.
-	jz .end
+printer:			; SI = nul terminated string
+	lodsb
+	or al, al
+	jz _print_char.ret
 	call _print_char
 	jmp printer
-.end:
-	ret
 
-_print_char:			; AL is preserved by the BIOS, BX is clobbered
-	mov ah, 0x0E		; BIOS teletype output, page 0
+_print_char:			; AL = character, CR also prints LF; clobbers AH, BX
+	mov ah, 0x0E
 	xor bx, bx
-	int 0x10
+	cmp al, 0x0D
+	int 0x10		; the flags survive the interrupt
+	jne .ret
+	mov al, 0x0A
+	jmp _print_char
+.ret:
 	ret
 
-print_val:
-	cmp ax, HEAP
-	jae .list
+print_val:			; AX = value
 	or ax, ax
-	jnz .sym
-	mov ax, __nil_sym
-.sym:
-	xchg ax, si		; a symbol is its name
+	js .list
+	jz .list		; nil prints as ()
+	xchg ax, si
 	jmp printer
 .list:
 	xchg ax, di
 	mov al, '('
+.elem:				; AL = separator, DI = cell or nil
 	call _print_char
-.elem:
+	or di, di
+	jz .close
 	push di
 	mov ax, [di]
 	call print_val
 	pop di
 	mov di, [di+2]
-	cmp di, HEAP		; any atom cdr ends the list
-	jb .close
 	mov al, ' '
-	call _print_char
-	jmp .elem
+	or di, di
+	js .elem
+	jz .close
+	mov si, __dot		; an atom as cdr
+	call printer
+	xchg ax, di
+	call print_val
 .close:
 	mov al, ')'
 	jmp _print_char
-
-__nil_sym:	db "()", 0x00

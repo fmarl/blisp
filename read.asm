@@ -16,45 +16,28 @@
 ;; Author: Florian Marrero Liestmann <f.m.liestmann@fx-ttr.de>
 ;; File: read.asm
 
-[BITS 16]
-
-_advance:			; __la <- next key, echoed; CR also echoes LF
-	mov ah, 0x00
-	int 0x16         	; wait for key -> AL
-	call _print_char
-	cmp al, 0x0D
-	jne .store
-	mov al, 0x0A
-	call _print_char
-.store:
-	mov [__la], al
-	ret
-
-_skip_ws:			; -> AL = first lookahead above ' '
-	mov al, [__la]
-	cmp al, ' '
-	ja .ret
-	call _advance
-	jmp _skip_ws
-.ret:
-	ret
-
-parse_expr:
+parse_expr:			; -> AX = expression
 	call _skip_ws
+	je .tail		; a stray ) reads as nil
 	cmp al, '('
 	je .list
-
-.atom:
-	mov di, [__names_ptr]
+	mov di, [__names_ptr]	; copy the name behind the table
 .copy:
 	stosb
+	or di, di
+	js _overflow
 	call _advance
 	mov al, [__la]
 	cmp al, ')'
 	ja .copy
+	cmp al, '('
+	jae .end
+	cmp al, ' '
+	ja .copy
+.end:
 	xor al, al
 	stosb
-	mov bx, __names
+	mov bx, __names		; the symbol is the first copy of the name
 .scan:
 	mov si, bx
 	mov di, [__names_ptr]
@@ -64,34 +47,49 @@ parse_expr:
 	jne .next
 	or al, al
 	jnz .cmp
-	mov ax, bx		; match; commit if it is the new copy
-	cmp bx, [__names_ptr]
+	mov ax, bx
+	cmp si, di		; only the new copy ends where the new copy ends
 	jne .ret
-	mov [__names_ptr], di
+	mov [__names_ptr], di	; keep it
 .ret:
 	ret
 .next:
-	lodsb			; skip SI to the start of the next name
+	dec si			; the mismatch may have been the terminator
+.skip:
+	lodsb
 	or al, al
-	jnz .next
+	jnz .skip
 	mov bx, si
 	jmp .scan
 
 .list:
-	call _advance		; consume the (
+	call _advance
 .tail:
 	call _skip_ws
-	cmp al, ')'
 	jne .item
-	call _advance		; consume the )
+	call _advance		; the key after the ) is consumed as well
 	xor ax, ax
 	ret
 .item:
 	call parse_expr
 	push ax
-	call .tail		; parse the rest of the list
-	mov dx, ax
-	pop ax
+	call .tail
+	pop dx
+	xchg ax, dx
 	jmp cons
 
-__la:	db ' '
+_advance:			; next key -> __la, echoed
+	mov ah, 0
+	int 0x16
+	mov [__la], al
+	jmp _print_char
+
+_skip_ws:			; -> AL = first lookahead above ' ', ZF = it is a )
+	mov al, [__la]
+	cmp al, ' '
+	ja .ret
+	call _advance
+	jmp _skip_ws
+.ret:
+	cmp al, ')'
+	ret
