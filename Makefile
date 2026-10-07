@@ -1,21 +1,16 @@
-KERN_SRC=kern.asm
-KERN_OBJ=kern.bin
-OUTPUTS=${KERN_OBJ}
+NASM ?= nasm
+QEMU ?= qemu-system-i386
+PYTHON ?= python3
 
-all: compile-kernel
-	@echo "[1] Done."
+all: kern.bin
 
-start: compile-kernel
-	qemu-system-i386 -drive format=raw,file=${KERN_OBJ}
+kern.bin: kern.asm interp.asm read.asm print.asm
+	$(NASM) -f bin -l kern.lst -o $@ $<
 
-compile-kernel: ${KERN_OBJ}
-	@echo "[0] Compiling $<"
-
-${KERN_OBJ}: ${KERN_SRC} interp.asm read.asm print.asm
-	@nasm -f bin $< -o $@
-
-.PHONY: all start compile-kernel clean
+start: kern.bin
+	$(QEMU) -drive format=raw,file=$<
 
 clean:
-	@echo "Cleaning"
-	@rm -rf ${OUTPUTS}
+	rm -f kern.bin kern.lst
+
+.PHONY: all start clean
