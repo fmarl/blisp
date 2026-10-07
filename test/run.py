@@ -1,8 +1,3 @@
-"""Smoke test for blisp: boots kern.bin under Unicorn, types at the prompt and checks the answers.
-
-Keys arrive through int 16h, output leaves through int 10h, int 19h counts as a reboot.
-"""
-
 import sys
 from pathlib import Path
 
@@ -66,6 +61,7 @@ def boot(image: bytes, keys: bytes, limit: int = 50_000_000) -> tuple[str, bool]
     def interrupt(uc: Uc, number: int, _data: object) -> None:
         nonlocal rebooted
         ip = uc.reg_read(UC_X86_REG_IP)
+        
         if number == 0x10 and uc.reg_read(UC_X86_REG_AH) == 0x0E:
             out.append(uc.reg_read(UC_X86_REG_AL))
         elif number == 0x16:
@@ -80,10 +76,12 @@ def boot(image: bytes, keys: bytes, limit: int = 50_000_000) -> tuple[str, bool]
             return
         else:
             raise RuntimeError(f"unexpected int {number:#x}")
+        
         uc.reg_write(UC_X86_REG_IP, ip)
 
     uc.hook_add(UC_HOOK_INTR, interrupt)
     uc.emu_start(LOAD, LOAD + len(image), count=limit)
+    
     return out.decode("latin-1"), rebooted
 
 
@@ -94,6 +92,7 @@ def main(path: str) -> int:
     keys = "".join(expr + "\r" for expr, _ in CASES).encode()
     out, rebooted = boot(image, keys)
     answers = out.split(PROMPT)[1 : len(CASES) + 1]
+    
     for (expr, want), answer in zip(CASES, answers, strict=True):
         got = answer.removeprefix(expr + "\r\n")
         if got != want or rebooted:
@@ -108,6 +107,7 @@ def main(path: str) -> int:
 
     total = len(CASES) + len(OVERFLOWS)
     print(f"{total - failed}/{total} passed")
+    
     return 1 if failed else 0
 
 
