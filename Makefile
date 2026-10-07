@@ -10,7 +10,10 @@ kern.bin: kern.asm interp.asm read.asm print.asm
 start: kern.bin
 	$(QEMU) -drive format=raw,file=$<
 
+test: kern.bin
+	$(PYTHON) test/run.py $<
+
 clean:
 	rm -f kern.bin kern.lst
 
-.PHONY: all start clean
+.PHONY: all start test clean
